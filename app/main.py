@@ -1,46 +1,45 @@
 import asyncio
-import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.responses import ORJSONResponse
-from sqlalchemy import select
 
-from app.core.config import settings
-from app.infra.database import db_helper, Base
-import app.domain.models as models
-from app.probes.icmp_probe import run_icmp_probe
+import uvicorn
+from fastapi import FastAPI
+
 from app.api import router as api_router
+from app.core.config import settings
+from app.core.logger import logger
+from app.infra.database import Base, db_helper
+import app.domain.models  # noqa: F401  # registers ORM models with Base.metadata
+from app.probes.icmp_probe import run_icmp_probe
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with db_helper.engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    async for session in db_helper.session_getter():
-        res = await session.execute(select(models.Device))
-        if not res.scalars().first():
-            session.add(models.Device(hostname="Google_DNS", ip_address="8.8.8.8", device_type="Router"))
-            await session.commit()
-            print("Додано тестовий пристрій Google_DNS.")
+    logger.info("Схема БД готова, фонові задачі запускаються.")
 
     probe_task = asyncio.create_task(run_icmp_probe())
 
-    yield
-
-    probe_task.cancel()
-    await db_helper.dispose()
+    try:
+        yield
+    finally:
+        probe_task.cancel()
+        try:
+            await probe_task
+        except asyncio.CancelledError:
+            pass
+        await db_helper.dispose()
+        logger.info("Фонові задачі зупинено, з'єднання з БД закриті.")
 
 
 main_app = FastAPI(
     title=settings.project_name,
     debug=True,
-    default_response_class=ORJSONResponse,
     lifespan=lifespan,
 )
 
-
 main_app.include_router(api_router)
+
 
 @main_app.get("/health")
 async def health_check():
@@ -48,4 +47,9 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:main_app", reload=True, host=settings.run.host, port=settings.run.port)
+    uvicorn.run(
+        "app.main:main_app",
+        reload=True,
+        host=settings.run.host,
+        port=settings.run.port,
+    )
