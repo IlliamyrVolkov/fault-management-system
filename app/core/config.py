@@ -1,5 +1,8 @@
+from pathlib import Path
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class RunConfig(BaseModel):
@@ -10,6 +13,7 @@ class RunConfig(BaseModel):
 class ApiV1Prefix(BaseModel):
     prefix: str = "/v1"
     devices: str = "/devices"
+    dashboard: str = "/dashboard"
 
 
 class ApiPrefix(BaseModel):
