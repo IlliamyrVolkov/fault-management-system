@@ -8,7 +8,7 @@ from app.api import router as api_router
 from app.core.config import settings
 from app.core.logger import logger
 from app.infra.database import Base, db_helper
-import app.domain.models  # noqa: F401  # registers ORM models with Base.metadata
+import app.domain.models  # noqa: F401
 from app.probes.icmp_probe import run_icmp_probe
 
 
