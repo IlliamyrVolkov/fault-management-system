@@ -12,6 +12,30 @@
                 <span class="badge bg-info text-dark">Система активна</span>
             </div>
 
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">Додати новий вузол</div>
+                <div class="card-body">
+                    <form id="add-device-form" class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label" for="hostname">Hostname</label>
+                            <input class="form-control" id="hostname" name="hostname" required maxlength="100" placeholder="Core_Switch">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="ip_address">IP-адреса</label>
+                            <input class="form-control" id="ip_address" name="ip_address" required placeholder="10.0.0.1">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="device_type">Тип</label>
+                            <input class="form-control" id="device_type" name="device_type" maxlength="50" placeholder="Switch">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary w-100" type="submit">Додати</button>
+                        </div>
+                    </form>
+                    <div id="form-error" class="text-danger small mt-2"></div>
+                </div>
+            </div>
+
             <div class="row">
                 <div class="col-md-12 mb-4">
                     <div class="card shadow-sm">
@@ -19,24 +43,7 @@
                         <div class="card-body">
                             <table class="table table-hover">
                                 <thead><tr><th>Host</th><th>IP</th><th>Status</th><th>Last Check</th></tr></thead>
-                                <tbody>
-                                    {% for row in devices %}
-                                    <tr>
-                                        <td>{{ row.device.hostname }}</td>
-                                        <td>{{ row.device.ip_address }}</td>
-                                        <td>
-                                            {% if row.device.status == "UP" %}
-                                                <span class="badge bg-success">UP</span>
-                                            {% else %}
-                                                <span class="badge bg-danger">DOWN</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>{{ row.last_check or "—" }}</td>
-                                    </tr>
-                                    {% else %}
-                                    <tr><td colspan="4" class="text-muted text-center">Немає зареєстрованих пристроїв.</td></tr>
-                                    {% endfor %}
-                                </tbody>
+                                <tbody id="devices-tbody"></tbody>
                             </table>
                         </div>
                     </div>
@@ -61,5 +68,89 @@
                 </div>
             </div>
         </div>
+
+        <script>
+            const DEVICES_URL = "{{ devices_url }}";
+            const REFRESH_MS = 5000;
+            const tbody = document.getElementById("devices-tbody");
+            const form = document.getElementById("add-device-form");
+            const formError = document.getElementById("form-error");
+
+            function statusBadge(status) {
+                const span = document.createElement("span");
+                span.className = status === "UP" ? "badge bg-success" : "badge bg-danger";
+                span.textContent = status;
+                return span;
+            }
+
+            function renderDevices(devices) {
+                tbody.replaceChildren();
+                if (!devices.length) {
+                    const tr = document.createElement("tr");
+                    const td = document.createElement("td");
+                    td.colSpan = 4;
+                    td.className = "text-muted text-center";
+                    td.textContent = "Немає зареєстрованих пристроїв.";
+                    tr.appendChild(td);
+                    tbody.appendChild(tr);
+                    return;
+                }
+                for (const d of devices) {
+                    const tr = document.createElement("tr");
+                    const host = document.createElement("td");
+                    host.textContent = d.hostname;
+                    const ip = document.createElement("td");
+                    ip.textContent = d.ip_address;
+                    const st = document.createElement("td");
+                    st.appendChild(statusBadge(d.status));
+                    const lc = document.createElement("td");
+                    lc.textContent = d.last_check || "—";
+                    tr.append(host, ip, st, lc);
+                    tbody.appendChild(tr);
+                }
+            }
+
+            async function refreshDevices() {
+                try {
+                    const resp = await fetch(DEVICES_URL);
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    renderDevices(data.devices);
+                } catch (e) {
+                    return;
+                }
+            }
+
+            form.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                formError.textContent = "";
+                const payload = {
+                    hostname: form.hostname.value.trim(),
+                    ip_address: form.ip_address.value.trim(),
+                    device_type: form.device_type.value.trim() || null,
+                };
+                try {
+                    const resp = await fetch(DEVICES_URL, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    });
+                    if (resp.ok) {
+                        form.reset();
+                        refreshDevices();
+                    } else {
+                        const err = await resp.json().catch(() => ({}));
+                        formError.textContent = err.detail
+                            ? (typeof err.detail === "string" ? err.detail : "Невірні дані форми.")
+                            : "Не вдалося додати пристрій.";
+                    }
+                } catch (e) {
+                    formError.textContent = "Помилка з'єднання з сервером.";
+                }
+            });
+
+            renderDevices({{ devices | tojson }});
+            setInterval(refreshDevices, REFRESH_MS);
+        </script>
     </body>
 </html>
