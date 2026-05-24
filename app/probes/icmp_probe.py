@@ -24,8 +24,11 @@ async def run_icmp_probe() -> None:
             async with db_helper.session_factory() as session:
                 devices = (await session.execute(select(Device))).scalars().all()
 
-                for device in devices:
-                    delay = await ping_device(str(device.ip_address))
+                delays = await asyncio.gather(
+                    *(ping_device(str(device.ip_address)) for device in devices)
+                )
+
+                for device, delay in zip(devices, delays, strict=True):
                     is_alive = delay is not None
                     raw_data = (
                         f"Delay: {round(delay * 1000, 2)} ms"
