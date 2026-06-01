@@ -33,7 +33,10 @@
                             <button class="btn btn-primary w-100" type="submit">Додати</button>
                         </div>
                     </form>
-                    <div id="form-error" class="text-danger small mt-2"></div>
+                    <div id="form-error" class="alert alert-danger alert-dismissible fade mt-3 d-none" role="alert">
+                        <span id="form-error-text"></span>
+                        <button type="button" class="btn-close" aria-label="Закрити" onclick="hideFormError()"></button>
+                    </div>
                 </div>
             </div>
 
@@ -76,6 +79,19 @@
             const tbody = document.getElementById("devices-tbody");
             const form = document.getElementById("add-device-form");
             const formError = document.getElementById("form-error");
+            const formErrorText = document.getElementById("form-error-text");
+
+            function showFormError(message) {
+                formErrorText.textContent = message;
+                formError.classList.remove("d-none");
+                formError.classList.add("show");
+            }
+
+            function hideFormError() {
+                formError.classList.remove("show");
+                formError.classList.add("d-none");
+                formErrorText.textContent = "";
+            }
 
             function statusBadge(status) {
                 const span = document.createElement("span");
@@ -151,7 +167,7 @@
 
             form.addEventListener("submit", async (e) => {
                 e.preventDefault();
-                formError.textContent = "";
+                hideFormError();
                 const payload = {
                     hostname: form.hostname.value.trim(),
                     ip_address: form.ip_address.value.trim(),
@@ -166,14 +182,24 @@
                     if (resp.ok) {
                         form.reset();
                         refreshDevices();
+                        return;
+                    }
+                    const err = await resp.json().catch(() => ({}));
+                    if (resp.status === 400) {
+                        showFormError(
+                            typeof err.detail === "string" ? err.detail : "Неверный формат IP-адреса"
+                        );
+                    } else if (resp.status === 422) {
+                        showFormError("Неверный формат IP-адреса");
                     } else {
-                        const err = await resp.json().catch(() => ({}));
-                        formError.textContent = err.detail
-                            ? (typeof err.detail === "string" ? err.detail : "Невірні дані форми.")
-                            : "Не вдалося додати пристрій.";
+                        showFormError(
+                            err.detail && typeof err.detail === "string"
+                                ? err.detail
+                                : "Не вдалося додати пристрій."
+                        );
                     }
                 } catch (e) {
-                    formError.textContent = "Помилка з'єднання з сервером.";
+                    showFormError("Помилка з'єднання з сервером.");
                 }
             });
 

@@ -1,7 +1,9 @@
+from ipaddress import IPv4Address
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field, IPvAnyAddress
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +26,7 @@ DEVICES_URL = (
 
 class DeviceCreate(BaseModel):
     hostname: str = Field(min_length=1, max_length=100)
-    ip_address: IPvAnyAddress
+    ip_address: str = Field(min_length=1, max_length=15)
     device_type: str | None = Field(default=None, max_length=50)
 
 
@@ -108,9 +110,17 @@ async def create_device(
     payload: DeviceCreate,
     session: AsyncSession = Depends(db_helper.session_getter),
 ):
+    try:
+        ip = IPv4Address(payload.ip_address.strip())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Неверный формат IP-адреса",
+        )
+
     device = Device(
         hostname=payload.hostname,
-        ip_address=str(payload.ip_address),
+        ip_address=str(ip),
         device_type=payload.device_type,
     )
     session.add(device)
