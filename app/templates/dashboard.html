@@ -3,6 +3,7 @@
     <head>
         <title>{{ project_name }} Dashboard</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
         <style> body { padding: 20px; background-color: #f4f7f6; } .status-card { border-radius: 10px; } </style>
     </head>
     <body>
@@ -42,7 +43,7 @@
                         <div class="card-header bg-dark text-white">Статус мережевих вузлів</div>
                         <div class="card-body">
                             <table class="table table-hover">
-                                <thead><tr><th>Host</th><th>IP</th><th>Status</th><th>Last Check</th></tr></thead>
+                                <thead><tr><th>Host</th><th>IP</th><th>Status</th><th>Last Check</th><th class="text-end"></th></tr></thead>
                                 <tbody id="devices-tbody"></tbody>
                             </table>
                         </div>
@@ -83,12 +84,25 @@
                 return span;
             }
 
+            function deleteButton(device) {
+                const td = document.createElement("td");
+                td.className = "text-end";
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "btn btn-sm btn-danger";
+                btn.title = `Видалити ${device.hostname}`;
+                btn.innerHTML = '<i class="bi bi-trash"></i>';
+                btn.addEventListener("click", () => deleteDevice(device));
+                td.appendChild(btn);
+                return td;
+            }
+
             function renderDevices(devices) {
                 tbody.replaceChildren();
                 if (!devices.length) {
                     const tr = document.createElement("tr");
                     const td = document.createElement("td");
-                    td.colSpan = 4;
+                    td.colSpan = 5;
                     td.className = "text-muted text-center";
                     td.textContent = "Немає зареєстрованих пристроїв.";
                     tr.appendChild(td);
@@ -105,8 +119,22 @@
                     st.appendChild(statusBadge(d.status));
                     const lc = document.createElement("td");
                     lc.textContent = d.last_check || "—";
-                    tr.append(host, ip, st, lc);
+                    tr.append(host, ip, st, lc, deleteButton(d));
                     tbody.appendChild(tr);
+                }
+            }
+
+            async function deleteDevice(device) {
+                if (!confirm(`Видалити пристрій ${device.hostname} (${device.ip_address})?`)) {
+                    return;
+                }
+                try {
+                    const resp = await fetch(`${DEVICES_URL}/${device.id}`, { method: "DELETE" });
+                    if (resp.ok) {
+                        refreshDevices();
+                    }
+                } catch (e) {
+                    return;
                 }
             }
 

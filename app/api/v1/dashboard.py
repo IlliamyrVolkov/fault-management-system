@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, IPvAnyAddress
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -124,3 +124,28 @@ async def create_device(
         )
     await session.refresh(device)
     return _serialize_device(device)
+
+
+@router.delete("/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_device(
+    device_id: int,
+    session: AsyncSession = Depends(db_helper.session_getter),
+):
+    device = await session.get(Device, device_id)
+    if device is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пристрій не знайдено.",
+        )
+
+    await session.execute(
+        delete(Alert).where(
+            Alert.event_id.in_(
+                select(Event.id).where(Event.device_id == device_id)
+            )
+        )
+    )
+    await session.execute(delete(Event).where(Event.device_id == device_id))
+    await session.delete(device)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
